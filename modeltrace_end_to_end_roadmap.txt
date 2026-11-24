@@ -1,0 +1,166 @@
+================================================================================
+MODELTRACE: END-TO-END ROADMAP TO AN IMPORTABLE, REUSABLE PYTHON TOOL
+================================================================================
+
+END GOAL:
+Transform ModelTrace from a collection of scripts and a cloud PostgreSQL schema 
+into a clean, installable, pip-ready Python package (`import modeltrace`) backed 
+by an optional REST API, so any developer or ML team can import it into their 
+training pipelines (Scikit-Learn, PyTorch, PyG, etc.) to automatically track 
+datasets, code versions, environments, hyperparameters, metrics, models, and 
+reproducibility checks in PostgreSQL.
+
+CURRENT STATE:
+- Cloud PostgreSQL database active on Aiven with full normalized schema.
+- All core tables populated (`users`, `projects`, `datasets`, `dataset_versions`,
+  `feature_sets`, `environments`, `pipelines`, `pipeline_versions`, 
+  `experiments`, `training_runs`, `hyperparameters`, `metrics`, `models`, 
+  `model_versions`, `deployments`, `reproducibility_checks`, `audit_logs`).
+- Baseline ETL scripts (`ingest_dataset.py`, `ingest_openml.py`, 
+  `ingest_mlflow.py`, `fill_all_lineage.py`) and sample training scripts created.
+
+================================================================================
+WORKSTREAM A: CORE PYTHON SDK, AUTO-CAPTURE & PACKAGING (TEAMMATE 1)
+Focus: Making ModelTrace an importable Python library (`import modeltrace`) that 
+anyone can plug into any ML script with minimal code changes.
+================================================================================
+
+PHASE A1: PACKAGE STRUCTURE & CONFIGURATION LAYER
+[ ] 1. Restructure repository into a standard src-layout Python package:
+       modeltrace/
+         src/
+           modeltrace/
+             __init__.py
+             config.py        (reads DATABASE_URL or accepts connection args)
+             db.py            (SQLAlchemy engine, connection pooling, auto-fix postgres://)
+             tracker.py       (main user-facing client & context managers)
+             hashing.py       (SHA-256 dataset/model artifact hashing & stats extraction)
+             env_capture.py   (auto-capture Python version, pip freeze, git commit hash)
+             sync_mlflow.py   (reusable library wrapper around MLflow SQLite/DB sync)
+         tests/
+         pyproject.toml
+         README.md
+[ ] 2. Implement auto-schema bootstrap (`modeltrace.init_db()`):
+       - Allow a new user pointing to a fresh PostgreSQL instance to run one 
+         command (`modeltrace.init_db()`) to create all normalized tables 
+         automatically if they do not exist yet.
+[ ] 3. Implement idempotent upserts across all core entities:
+       - Ensure re-running scripts with the same user, project, dataset hash, 
+         environment manifest, or git commit hash fetches existing IDs instead 
+         of failing on unique constraints or creating duplicate rows.
+
+PHASE A2: USER-FACING TRACKING API (`import modeltrace`)
+[ ] 4. Build `ModelTraceClient` / `mt.init(project="...", user_email="...")`:
+       - Automatically resolve or create user, project, current git commit 
+         (`pipelines` + `pipeline_versions`), and active Python environment 
+         (`environments`).
+[ ] 5. Build dataset & feature registration methods:
+       - `mt.log_dataset(data_or_path, name, version, description)`:
+         Supports pandas DataFrames, CSV/Parquet files, GeoJSON/spatial files, 
+         or external URIs (like OpenML), auto-computing SHA-256 hashes and 
+         summary statistics.
+       - `mt.log_features(dataset_version_id, name, version, feature_names)`:
+         Links engineered feature sets to dataset versions.
+[ ] 6. Build run context manager (`with mt.start_run(experiment="...", dataset_version=...) as run:`):
+       - Automatically links the `training_run` to `experiment_id`, 
+         `dataset_version_id`, `pipeline_version_id`, and `environment_id`.
+       - Provide clean methods inside the context:
+         * `run.log_params({"lr": 0.01, ...})`
+         * `run.log_metric("accuracy", 0.95, step=1)`
+         * `run.log_model(model_obj_or_path, name, version, metrics_summary)`
+         * `run.verify_reproducibility(reference_run_id)` -> writes to 
+           `reproducibility_checks`.
+       - Automatically log start/end timestamps, catch exceptions to mark status 
+         as `FAILED` vs `COMPLETED`, and write an entry to `audit_logs`.
+
+PHASE A3: FRAMEWORK INTEGRATIONS & DISTRIBUTION
+[ ] 7. Add optional convenience hooks / MLflow bridge:
+       - `mt.import_mlflow(tracking_uri="sqlite:///mlruns.db", project="...")`:
+         Cleanly imports existing MLflow runs into ModelTrace tables.
+       - Optional lightweight callbacks/wrappers for Scikit-Learn, PyTorch, and 
+         PyTorch Geometric (e.g., logging epoch metrics cleanly).
+[ ] 8. Write unit and integration tests (`pytest`):
+       - Test against a local SQLite/PostgreSQL test database covering full 
+         end-to-end lineage creation, duplicate prevention, and error handling.
+[ ] 9. Package & publish readiness:
+       - Finalize `pyproject.toml` with clean dependencies (core dependencies 
+         minimal: `sqlalchemy`, `psycopg[binary]`, `python-dotenv`, `pandas`; 
+         optional extras like `modeltrace[mlflow]`, `modeltrace[openml]`).
+       - Verify local editable install (`pip install -e .`) and wheel build 
+         (`python -m build`) work cleanly in a fresh virtual environment.
+
+================================================================================
+WORKSTREAM B: FASTAPI SERVICE, LINEAGE QUERIES & DEPLOYMENT/CLI (TEAMMATE 2)
+Focus: Querying, visualizing, serving, and operating ModelTrace data over HTTP 
+and CLI so teams can inspect lineage, deployments, and reproducibility.
+================================================================================
+
+PHASE B1: LINEAGE QUERY ENGINE & FASTAPI BACKEND
+[ ] 1. Set up FastAPI application structure (`modeltrace/api/`):
+       - `main.py` (FastAPI app, CORS, lifespan DB check, `/health` endpoint)
+       - `schemas.py` (Pydantic response & request models for strict typing)
+       - `queries.py` (Optimized SQLAlchemy relational join queries)
+[ ] 2. Implement core read & discovery endpoints:
+       - `GET /projects` and `GET /projects/{project_id}/experiments`
+       - `GET /datasets` and `GET /datasets/{dataset_id}/versions`
+       - `GET /runs` (filterable by experiment, status, or dataset_version_id)
+       - `GET /runs/{run_id}` (returns run metadata + nested hyperparameters 
+         + nested metrics)
+       - `GET /models` and `GET /models/{model_id}/versions`
+[ ] 3. Implement the signature End-to-End Lineage Graph endpoint:
+       - `GET /lineage/run/{run_id}`:
+         Single endpoint returning the complete upstream and downstream chain:
+         User -> Project -> Dataset & Version (hash/stats) -> Feature Set -> 
+         Pipeline & Git Commit -> Environment Manifest -> Experiment -> 
+         Training Run (Params + Metrics) -> Model Version -> Deployment -> 
+         Reproducibility Check.
+       - `GET /lineage/model/{model_version_id}`:
+         Traces a deployed model all the way back to the exact raw dataset hash, 
+         code commit, and environment that produced it.
+
+PHASE B2: WRITE ENDPOINTS, DEPLOYMENT TRACKING & CLI
+[ ] 4. Implement REST ingestion & lifecycle endpoints (for non-Python or remote clients):
+       - `POST /datasets/register`
+       - `POST /runs` (create run, log params/metrics remotely)
+       - `POST /deployments` & `PATCH /deployments/{deployment_id}/status` 
+         (track staging/production endpoints and automatically record entries 
+         in `audit_logs`).
+       - `POST /reproducibility-checks` (record hash/metric comparisons across runs).
+[ ] 5. Build a lightweight CLI (`modeltrace` console script via Typer or Click):
+       - `modeltrace init` -> initializes database tables from `DATABASE_URL`.
+       - `modeltrace status` -> checks DB connection and prints table row counts.
+       - `modeltrace serve` -> launches the FastAPI server (`uvicorn`).
+       - `modeltrace sync-mlflow --uri sqlite:///mlruns.db` -> triggers sync.
+       - `modeltrace inspect-run <run_id>` -> prints formatted lineage tree in 
+         the terminal.
+
+PHASE B3: DOCUMENTATION, EXAMPLES & END-TO-END DEMO
+[ ] 6. Build 2–3 plug-and-play end-to-end example notebooks/scripts in `examples/`:
+       - `examples/sklearn_quickstart.py` (tabular classification + lineage)
+       - `examples/pytorch_quickstart.py` (deep learning training loop + lineage)
+       - `examples/bbmp_spatial_gnn.py` (real-world spatial graph use case: 
+         198-ward flood vulnerability & stagnation dataset -> PyG GNN -> 
+         registered model & lineage trace).
+[ ] 7. Write comprehensive `README.md` & API documentation:
+       - Document 5-minute quickstart (`pip install`, setting `DATABASE_URL`, 
+         `modeltrace.init_db()`, running a tracked script, and viewing lineage 
+         via CLI or FastAPI `/docs`).
+[ ] 8. Containerize the API service (`Dockerfile` + `docker-compose.yml`):
+       - Provide a single-command Docker setup for teams who want to self-host 
+         both PostgreSQL and the ModelTrace FastAPI server alongside the Python 
+         client package.
+
+================================================================================
+INTEGRATION SYNC POINTS BETWEEN WORKSTREAM A & WORKSTREAM B
+================================================================================
+- SYNC 1 (Schema & Foreign Keys): Agree on exact column names and nullable vs.
+  required foreign keys (`dataset_version_id`, `pipeline_version_id`, 
+  `environment_id` on `training_runs`) before writing SDK inserts and API joins.
+- SYNC 2 (Package Layout): Workstream A owns `src/modeltrace/tracker.py`, 
+  `db.py`, `hashing.py`, `env_capture.py`; Workstream B owns `src/modeltrace/api/` 
+  and `src/modeltrace/cli.py` inside the same repository so both ship in one 
+  installable package.
+- SYNC 3 (Final End-to-End Test): Run the BBMP GNN example using only the 
+  installed `modeltrace` package (`import modeltrace`), then query its full 
+  lineage through Workstream B's FastAPI `/lineage/model/{id}` endpoint and CLI.
+================================================================================
