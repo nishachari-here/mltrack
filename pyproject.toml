@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "modeltrace"
+version = "0.1.0"
+description = "Lineage tracking and inspection for machine learning experiments"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.100",
+  "uvicorn>=0.23",
+  "SQLAlchemy>=2.0",
+  "psycopg[binary]>=3.1",
+  "python-dotenv>=1.0",
+  "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+mlflow = ["mlflow>=2.0"]
+openml = ["openml>=0.15"]
+test = ["pytest>=8", "httpx2>=2"]
+
+[project.scripts]
+modeltrace = "modeltrace.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src", "etl" = "etl"}
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["modeltrace*", "etl*"]
+
+[tool.setuptools.data-files]
+"share/modeltrace/database" = ["database/schema.sql"]

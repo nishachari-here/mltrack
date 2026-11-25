@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: modeltrace
+Version: 0.1.0
+Summary: Lineage tracking and inspection for machine learning experiments
+Requires-Python: >=3.10
+Requires-Dist: fastapi>=0.100
+Requires-Dist: uvicorn>=0.23
+Requires-Dist: SQLAlchemy>=2.0
+Requires-Dist: psycopg[binary]>=3.1
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: pandas>=2.0
+Provides-Extra: mlflow
+Requires-Dist: mlflow>=2.0; extra == "mlflow"
+Provides-Extra: openml
+Requires-Dist: openml>=0.15; extra == "openml"
+Provides-Extra: test
+Requires-Dist: pytest>=8; extra == "test"
+Requires-Dist: httpx2>=2; extra == "test"

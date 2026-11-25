@@ -1,0 +1,16 @@
+fastapi>=0.100
+uvicorn>=0.23
+SQLAlchemy>=2.0
+psycopg[binary]>=3.1
+python-dotenv>=1.0
+pandas>=2.0
+
+[mlflow]
+mlflow>=2.0
+
+[openml]
+openml>=0.15
+
+[test]
+pytest>=8
+httpx2>=2

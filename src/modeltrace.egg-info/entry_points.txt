@@ -1,0 +1,2 @@
+[console_scripts]
+modeltrace = modeltrace.cli:main

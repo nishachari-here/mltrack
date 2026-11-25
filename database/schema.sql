@@ -4,7 +4,7 @@
 -- Enable UUID extension if needed, or use SERIAL primary keys
 -- Using SERIAL for clean relational incrementing keys
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     user_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
     project_id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE projects (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE datasets (
+CREATE TABLE IF NOT EXISTS datasets (
     dataset_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -29,7 +29,7 @@ CREATE TABLE datasets (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE dataset_versions (
+CREATE TABLE IF NOT EXISTS dataset_versions (
     dataset_version_id SERIAL PRIMARY KEY,
     dataset_id INT REFERENCES datasets(dataset_id) ON DELETE CASCADE,
     version_no VARCHAR(50) NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE dataset_versions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE pipelines (
+CREATE TABLE IF NOT EXISTS pipelines (
     pipeline_id SERIAL PRIMARY KEY,
     project_id INT REFERENCES projects(project_id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE pipelines (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE pipeline_versions (
+CREATE TABLE IF NOT EXISTS pipeline_versions (
     pipeline_version_id SERIAL PRIMARY KEY,
     pipeline_id INT REFERENCES pipelines(pipeline_id) ON DELETE CASCADE,
     version_no VARCHAR(50) NOT NULL,
@@ -57,7 +57,7 @@ CREATE TABLE pipeline_versions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE experiments (
+CREATE TABLE IF NOT EXISTS experiments (
     experiment_id SERIAL PRIMARY KEY,
     project_id INT REFERENCES projects(project_id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -65,14 +65,15 @@ CREATE TABLE experiments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE feature_sets (
+CREATE TABLE IF NOT EXISTS feature_sets (
     feature_set_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
+    dataset_version_id INT REFERENCES dataset_versions(dataset_version_id) ON DELETE SET NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE environments (
+CREATE TABLE IF NOT EXISTS environments (
     environment_id SERIAL PRIMARY KEY,
     python_version VARCHAR(50),
     os VARCHAR(100),
@@ -81,11 +82,12 @@ CREATE TABLE environments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE training_runs (
+CREATE TABLE IF NOT EXISTS training_runs (
     training_run_id SERIAL PRIMARY KEY,
     experiment_id INT REFERENCES experiments(experiment_id) ON DELETE CASCADE,
     pipeline_version_id INT REFERENCES pipeline_versions(pipeline_version_id) ON DELETE SET NULL,
     dataset_version_id INT REFERENCES dataset_versions(dataset_version_id) ON DELETE SET NULL,
+    environment_id INT REFERENCES environments(environment_id) ON DELETE SET NULL,
     run_number INT NOT NULL,
     start_time TIMESTAMP,
     end_time TIMESTAMP,
@@ -93,7 +95,7 @@ CREATE TABLE training_runs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE hyperparameters (
+CREATE TABLE IF NOT EXISTS hyperparameters (
     hyperparameter_id SERIAL PRIMARY KEY,
     training_run_id INT REFERENCES training_runs(training_run_id) ON DELETE CASCADE,
     param_name VARCHAR(255) NOT NULL,
@@ -101,7 +103,7 @@ CREATE TABLE hyperparameters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE metrics (
+CREATE TABLE IF NOT EXISTS metrics (
     metric_id SERIAL PRIMARY KEY,
     training_run_id INT REFERENCES training_runs(training_run_id) ON DELETE CASCADE,
     metric_name VARCHAR(255) NOT NULL,
@@ -109,7 +111,7 @@ CREATE TABLE metrics (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE models (
+CREATE TABLE IF NOT EXISTS models (
     model_id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     model_type VARCHAR(100),
@@ -117,7 +119,7 @@ CREATE TABLE models (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE model_versions (
+CREATE TABLE IF NOT EXISTS model_versions (
     model_version_id SERIAL PRIMARY KEY,
     model_id INT REFERENCES models(model_id) ON DELETE CASCADE,
     training_run_id INT REFERENCES training_runs(training_run_id) ON DELETE SET NULL,
@@ -126,7 +128,7 @@ CREATE TABLE model_versions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE deployments (
+CREATE TABLE IF NOT EXISTS deployments (
     deployment_id SERIAL PRIMARY KEY,
     model_version_id INT REFERENCES model_versions(model_version_id) ON DELETE CASCADE,
     deployment_name VARCHAR(255) NOT NULL,
@@ -135,7 +137,7 @@ CREATE TABLE deployments (
     deployed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE reproducibility_checks (
+CREATE TABLE IF NOT EXISTS reproducibility_checks (
     check_id SERIAL PRIMARY KEY,
     training_run_id INT REFERENCES training_runs(training_run_id) ON DELETE CASCADE,
     environment_id INT REFERENCES environments(environment_id) ON DELETE SET NULL,
@@ -144,7 +146,7 @@ CREATE TABLE reproducibility_checks (
     checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     log_id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     operation_type VARCHAR(100) NOT NULL,
@@ -153,3 +155,6 @@ CREATE TABLE audit_logs (
     description TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE training_runs ADD COLUMN IF NOT EXISTS environment_id INT REFERENCES environments(environment_id) ON DELETE SET NULL;
+ALTER TABLE feature_sets ADD COLUMN IF NOT EXISTS dataset_version_id INT REFERENCES dataset_versions(dataset_version_id) ON DELETE SET NULL;
